@@ -47,9 +47,8 @@ def setup_socket(ip):
 
 
 def set_state(sock, desired_state):
-  logging.info('Setting smartplug state to %d.', desired_state)
+  logging.info('Setting smartplug state to "%s".', STATES[desired_state])
   sock.send(COMMANDS['state'][desired_state])
-  sock.close()
   logging.info('Done.')
 
 
@@ -83,6 +82,7 @@ logging.info('Connected to smartplug (%s)', args.smartplug)
 relay_state = query_smartplug(sock)
 logging.info('State is "%s"', STATES[relay_state])
 if args.on and relay_state == 0:
-  set_state(args.smartplug, 1)
+  set_state(sock, 1)
 if args.off and relay_state == 1:
-  set_state(args.smartplug, 0)
+  set_state(sock, 0)
+sock.close()
