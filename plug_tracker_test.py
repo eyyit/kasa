@@ -2,8 +2,6 @@
 import unittest
 from datetime import datetime, time, timedelta
 from unittest.mock import MagicMock, patch, call
-import sys
-import os
 
 import plug_tracker
 
@@ -87,7 +85,8 @@ class TestPlugTracker(unittest.TestCase):
         scheduler=mock_scheduler
     )
     
-    # Scenario 1: Leader state 0 (default prev_state -1) -> Follower NOT updated (initial sync skipped)
+    # Scenario 1: Leader state 0 (default prev_state -1) -> Follower NOT updated
+    # (initial sync skipped)
     mock_leader.get_relay_state.return_value = 0
     tracker.tick()
     mock_follower.set_relay_state.assert_not_called()

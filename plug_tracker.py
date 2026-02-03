@@ -166,18 +166,24 @@ class PlugTracker:
   def run(self) -> None:
     """Main loop."""
     logging.info('PlugTracker started.')
+    is_sleeping = False
     
     while True:
       now = datetime.now()
       
       if not self.scheduler.is_active(now.time()):
         wait_seconds = self.scheduler.seconds_until_next_active(now)
-        logging.info(
-            'Outside active hours. Sleeping for %d seconds.', wait_seconds)
+        if not is_sleeping:
+          logging.info(
+              'Outside active hours. Sleeping for %d seconds.', wait_seconds)
+          is_sleeping = True
+          self.prev_state = -1  # Reset state on sleep
         time.sleep(wait_seconds)
-        logging.info('Waking up. Resuming operations.')
-        self.prev_state = -1  # Reset state on wake
         continue
+
+      if is_sleeping:
+        logging.info('Waking up. Resuming operations.')
+        is_sleeping = False
 
       try:
         self.tick()
