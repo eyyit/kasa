@@ -3,7 +3,7 @@ Description=Kasa Smartplug Tracker Service
 After=networking.target
 
 [Service]
-ExecStart=/usr/bin/python3 /opt/repos/kasa/plug_tracker.py --leader 10.0.0.37 --follower 10.0.0.31 --active 06:00-09:00 --active 18:00-22:00
+ExecStart=/usr/bin/python3 /opt/repos/kasa/plug_tracker.py --leader 10.0.0.54 --follower 10.0.0.36 --active 06:00-09:00 --active 18:00-22:00
 Restart=on-failure
 StandardOutput=null
 
