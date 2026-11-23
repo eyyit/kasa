@@ -18,18 +18,12 @@ from datetime import datetime, timedelta, date, time as dt_time
 from struct import pack
 from typing import List, Tuple, Optional, Dict, Any
 
-# Adjust path to find mypylib if needed
-sys.path.append('/opt/repos/mypylib')
-try:
-  from mypylib import setup_logging
-except ImportError:
-  # Fallback for local testing if mypylib is not present
-  def setup_logging(log_path: str) -> None:
-    logging.basicConfig(
-        filename=log_path,
-        level=logging.INFO,
-        format='%(asctime)s %(levelname)s %(message)s'
-    )
+def setup_logging(log_path: str) -> None:
+  logging.basicConfig(
+      filename=log_path,
+      level=logging.INFO,
+      format='%(asctime)s %(levelname)s %(message)s'
+  )
 
 
 def encrypt(string: str) -> bytes:

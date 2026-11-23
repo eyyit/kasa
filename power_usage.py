@@ -9,8 +9,13 @@ import sys
 import time
 from struct import pack
 
-sys.path.append('/opt/repos/mypylib')
-from mypylib import setup_logging, write_graphite_entries
+def setup_logging(log_path):
+  logging.basicConfig(
+      level=logging.INFO,
+      format='%(levelname).1s%(asctime)s %(lineno)-3s]  %(message)s',
+      datefmt='%Y-%m-%d_%H:%M:%S',
+      handlers=[logging.FileHandler(log_path), logging.StreamHandler(sys.stdout)],
+  )
 
 
 def encrypt(string):
@@ -74,5 +79,4 @@ while True:
   for k,v in emeter.items():
     data.append(f'smartplug_power.computer.{k} {v} -1.')
   logging.info(data)
-  write_graphite_entries(data)
   time.sleep(1)
