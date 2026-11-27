@@ -15,8 +15,15 @@ import socket
 import sys
 import time
 from datetime import datetime, timedelta, date, time as dt_time
-from struct import pack
 from typing import List, Tuple, Optional, Dict, Any
+
+from kasa_transport import (
+    SMARTPLUG_PORT,
+    check_ack,
+    decrypt,
+    encrypt,
+    send_command,
+)
 
 def setup_logging(log_path: str) -> None:
   logging.basicConfig(
@@ -26,28 +33,6 @@ def setup_logging(log_path: str) -> None:
   )
 
 
-def encrypt(string: str) -> bytes:
-  """Encrypts a string for TP-Link smartplug protocol."""
-  key = 171
-  result = pack('>I', len(string))
-  for i in string:
-    a = key ^ ord(i)
-    key = a
-    result += bytes([a])
-  return result
-
-
-def decrypt(string: bytes) -> str:
-  """Decrypts a byte string from TP-Link smartplug protocol."""
-  key = 171
-  result = ''
-  for i in string:
-    a = key ^ i
-    key = i
-    result += chr(a)
-  return result
-
-
 COMMANDS = {
     'state': {
         0: encrypt('{"system":{"set_relay_state":{"state":0}}}'),
@@ -55,8 +40,6 @@ COMMANDS = {
     },
     'sysinfo': encrypt('{"system":{"get_sysinfo":null}}'),
 }
-
-SMARTPLUG_PORT = 9999
 
 
 class SmartPlugClient:
@@ -75,20 +58,21 @@ class SmartPlugClient:
     """Queries the smartplug for its relay state (0 or 1)."""
     sock = self._connect()
     try:
-      sock.send(COMMANDS['sysinfo'])
-      # Receive header to know length, or just read a chunk
-      data = sock.recv(2048)
-      decrypted = decrypt(data[4:])
-      json_data = json.loads(decrypted)
-      return json_data['system']['get_sysinfo']['relay_state']
+      json_data = send_command(sock, COMMANDS['sysinfo'])
+      sysinfo = check_ack(json_data, 'system', 'get_sysinfo')
+      relay_state = sysinfo['relay_state']
+      if relay_state not in (0, 1):
+        raise ValueError(f'Invalid relay_state: {relay_state!r}')
+      return int(relay_state)
     finally:
       sock.close()
 
   def set_relay_state(self, state: int) -> None:
-    """Sets the smartplug relay state."""
+    """Sets the smartplug relay state and verifies device acknowledgment."""
     sock = self._connect()
     try:
-      sock.send(COMMANDS['state'][state])
+      json_data = send_command(sock, COMMANDS['state'][state])
+      check_ack(json_data, 'system', 'set_relay_state')
     finally:
       sock.close()
 
@@ -192,7 +176,7 @@ class PlugTracker:
     """Single iteration of checking and updating."""
     try:
       leader_state = self.leader_client.get_relay_state()
-    except (socket.error, socket.timeout) as e:
+    except (OSError, socket.timeout, ValueError, RuntimeError, KeyError) as e:
       logging.warning('Could not connect to leader: %s', e)
       return
 
@@ -202,8 +186,9 @@ class PlugTracker:
             'Leader changed to %d. Updating follower.', leader_state)
         try:
           self.follower_client.set_relay_state(leader_state)
-        except (socket.error, socket.timeout) as e:
+        except (OSError, socket.timeout, ValueError, RuntimeError, KeyError) as e:
           logging.error('Failed to update follower: %s', e)
+          return
       self.prev_state = leader_state
 
 

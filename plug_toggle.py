@@ -2,53 +2,39 @@
 # Copied and modified from https://github.com/softScheck/tplink-smartplug
 
 import argparse
-import json
 import logging
 import socket
 import sys
-import time
-from datetime import datetime, timedelta
-from struct import pack
 
-def encrypt(string):
-  key = 171
-  result = pack('>I', len(string))
-  for i in string:
-    a = key ^ ord(i)
-    key = a
-    result += bytes([a])
-  return result
-
-
-def decrypt(string):
-  key = 171
-  result = ''
-  for i in string:
-    a = key ^ i
-    key = i
-    result += chr(a)
-  return result
+from kasa_transport import (
+    SMARTPLUG_PORT,
+    check_ack,
+    decrypt,
+    encrypt,
+    send_command,
+)
 
 
 def query_smartplug(sock):
-  sock.send(COMMANDS['sysinfo'])
-  str_data = sock.recv(2048)
-  decrypted = decrypt(str_data[4:])
-  data = json.loads(decrypted)
-  relay_state = data['system']['get_sysinfo']['relay_state']
-  return relay_state
+  data = send_command(sock, COMMANDS['sysinfo'])
+  sysinfo = check_ack(data, 'system', 'get_sysinfo')
+  relay_state = sysinfo['relay_state']
+  if relay_state not in (0, 1):
+    raise ValueError(f'Invalid relay_state: {relay_state!r}')
+  return int(relay_state)
 
 
 def setup_socket(ip):
   sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-  sock.settimeout(1)
+  sock.settimeout(2.0)
   sock.connect((ip, SMARTPLUG_PORT))
   return sock
 
 
 def set_state(sock, desired_state):
   logging.info('Setting smartplug state to "%s".', STATES[desired_state])
-  sock.send(COMMANDS['state'][desired_state])
+  data = send_command(sock, COMMANDS['state'][desired_state])
+  check_ack(data, 'system', 'set_relay_state')
   logging.info('Done.')
 
 
@@ -60,8 +46,6 @@ COMMANDS = {
     },
     'sysinfo': encrypt('{"system":{"get_sysinfo":null}}'),
 }
-
-SMARTPLUG_PORT = 9999
 
 STATES = ['off', 'on']
 

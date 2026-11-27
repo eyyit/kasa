@@ -2,46 +2,31 @@
 # Copied and modified from https://github.com/softScheck/tplink-smartplug
 
 import argparse
-import json
 import logging
 import socket
 import sys
-import time
-from datetime import datetime, timedelta
-from struct import pack
 
-def encrypt(string):
-  key = 171
-  result = pack('>I', len(string))
-  for i in string:
-    a = key ^ ord(i)
-    key = a
-    result += bytes([a])
-  return result
-
-
-def decrypt(string):
-  key = 171
-  result = ''
-  for i in string:
-    a = key ^ i
-    key = i
-    result += chr(a)
-  return result
+from kasa_transport import (
+    SMARTPLUG_PORT,
+    check_ack,
+    decrypt,
+    encrypt,
+    send_command,
+)
 
 
 def query_smartplug(sock):
-  sock.send(COMMANDS['sysinfo'])
-  str_data = sock.recv(2048)
-  decrypted = decrypt(str_data[4:])
-  data = json.loads(decrypted)
-  relay_state = data['system']['get_sysinfo']['relay_state']
-  return relay_state
+  data = send_command(sock, COMMANDS['sysinfo'])
+  sysinfo = check_ack(data, 'system', 'get_sysinfo')
+  relay_state = sysinfo['relay_state']
+  if relay_state not in (0, 1):
+    raise ValueError(f'Invalid relay_state: {relay_state!r}')
+  return int(relay_state)
 
 
 def setup_socket(ip):
   sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-  sock.settimeout(1)
+  sock.settimeout(2.0)
   sock.connect((ip, SMARTPLUG_PORT))
   return sock
 
@@ -50,8 +35,6 @@ def setup_socket(ip):
 COMMANDS = {
     'sysinfo': encrypt('{"system":{"get_sysinfo":null}}'),
 }
-
-SMARTPLUG_PORT = 9999
 
 STATES = ['off', 'on']
 
@@ -75,13 +58,22 @@ if not (args.on or args.off):
   parser.error('Specify --on or --off.')
 
 error_msg = ''
+sock = None
 try:
   sock = setup_socket(args.smartplug)
   relay_state = query_smartplug(sock)
 except ConnectionRefusedError:
   error_msg = 'is UNREACHABLE'
-except TimeoutError:
+except (TimeoutError, socket.timeout):
   error_msg = 'TIMED OUT'
+except (OSError, ValueError, RuntimeError, KeyError) as e:
+  error_msg = f'PROTOCOL ERROR ({e})'
+finally:
+  if sock is not None:
+    try:
+      sock.close()
+    except OSError:
+      pass
 
 if error_msg:
   print(f'UNKNOWN: smartplug {args.smartplug} {error_msg}')
