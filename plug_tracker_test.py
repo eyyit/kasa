@@ -109,5 +109,68 @@ class TestPlugTracker(unittest.TestCase):
     self.assertEqual(start, time(8, 0))
     self.assertEqual(end, time(10, 0))
 
+  @patch('plug_tracker.setup_logging')
+  @patch('plug_tracker.send_command')
+  @patch('plug_tracker.SmartPlugClient._connect')
+  def test_empty_set_relay_ack_raises_and_triggers_retry(
+      self, mock_connect, mock_send, mock_logging
+  ):
+    """V07: Empty {} set_relay_state ack must fail and keep prev_state for retry."""
+    mock_connect.return_value = MagicMock()
+    mock_scheduler = MagicMock()
+    mock_scheduler.is_active.return_value = True
+
+    tracker = plug_tracker.PlugTracker(
+        leader_ip='1.1.1.1',
+        follower_ip='2.2.2.2',
+        scheduler=mock_scheduler,
+    )
+
+    # Tick 1: initial sync sets prev_state = 0
+    mock_send.side_effect = [
+        {'system': {'get_sysinfo': {'err_code': 0, 'relay_state': 0}}},
+    ]
+    tracker.tick()
+    self.assertEqual(tracker.prev_state, 0)
+
+    # Tick 2: leader changes to 1, follower returns empty {} ack (missing err_code)
+    mock_send.side_effect = [
+        {'system': {'get_sysinfo': {'err_code': 0, 'relay_state': 1}}},
+        {'system': {'set_relay_state': {}}},
+    ]
+    tracker.tick()
+    self.assertEqual(tracker.prev_state, 0)
+
+    # Tick 3: retries set_relay_state(1) and advances prev_state only on err_code == 0
+    mock_send.side_effect = [
+        {'system': {'get_sysinfo': {'err_code': 0, 'relay_state': 1}}},
+        {'system': {'set_relay_state': {'err_code': 0}}},
+    ]
+    tracker.tick()
+    self.assertEqual(tracker.prev_state, 1)
+
+
+class TestKasaTransportAck(unittest.TestCase):
+  def test_check_ack_requires_explicit_zero_err_code(self):
+    import kasa_transport
+
+    with self.assertRaises(ValueError):
+      kasa_transport.check_ack({'system': {'set_relay_state': {}}}, 'system', 'set_relay_state')
+
+    with self.assertRaises(RuntimeError):
+      kasa_transport.check_ack(
+          {'system': {'set_relay_state': {'err_code': -1}}}, 'system', 'set_relay_state'
+      )
+
+    with self.assertRaises(RuntimeError):
+      kasa_transport.check_ack(
+          {'system': {'set_relay_state': {'err_code': False}}}, 'system', 'set_relay_state'
+      )
+
+    res = kasa_transport.check_ack(
+        {'system': {'set_relay_state': {'err_code': 0}}}, 'system', 'set_relay_state'
+    )
+    self.assertEqual(res, {'err_code': 0})
+
 if __name__ == '__main__':
   unittest.main()

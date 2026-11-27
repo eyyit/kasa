@@ -69,7 +69,9 @@ def check_ack(response: Dict[str, Any], section: str, method: str) -> Dict[str, 
   res = sec.get(method)
   if not isinstance(res, dict):
     raise ValueError(f'Missing response method {method!r}')
-  err_code = res.get('err_code', 0)
-  if err_code != 0:
+  if 'err_code' not in res:
+    raise ValueError(f'Missing err_code in {section}.{method} response')
+  err_code = res['err_code']
+  if isinstance(err_code, bool) or err_code != 0:
     raise RuntimeError(f'Device rejected {section}.{method}: err_code={err_code}')
   return res
