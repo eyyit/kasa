@@ -80,6 +80,7 @@ def main() -> None:
   plug = SmartPlug(args.smartplug)
   original_relay_state = None
   current_state = None
+  state_uncertain = False
   exit_code = 0
 
   try:
@@ -95,8 +96,10 @@ def main() -> None:
       next_state = current_state ^ 1
       logging.info('Setting smartplug state to "%s" (Commit %d/%d).',
                    'on' if next_state else 'off', i + 1, toggles)
+      state_uncertain = True
       plug.set_relay_state(next_state)
       current_state = next_state
+      state_uncertain = False
       time.sleep(args.delay / 1000)
 
   except KeyboardInterrupt:
@@ -106,7 +109,7 @@ def main() -> None:
     logging.error(f'An error occurred: {e}')
     exit_code = 1
   finally:
-    if original_relay_state is not None and current_state != original_relay_state:
+    if original_relay_state is not None and (state_uncertain or current_state != original_relay_state):
       try:
         logging.info('Returning to original state "%s".',
                      'on' if original_relay_state else 'off')
